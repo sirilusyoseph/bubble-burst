@@ -4,10 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Bubble Burst</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0b0d17">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   :root {
     --bg: #0b0d17;
@@ -428,22 +424,37 @@
     fallingBubbles = fallingBubbles.filter(b => b.y - R < H + 10);
   }
 
-  function drawBubble(x, y, colorIdx, scale) {
-    scale = scale || 1;
-    ctx.save();
-    ctx.translate(x, y);
-    const grad = ctx.createRadialGradient(-R*0.3*scale, -R*0.3*scale, R*0.2*scale, 0, 0, R*scale);
+  // Pre-render each bubble color once to an offscreen sprite (built after COLORS
+  // is known). Reused every frame via drawImage instead of rebuilding a
+  // gradient + arc + stroke per bubble per frame — the main mobile slowdown.
+  const SPRITE_PAD = 3;
+  const SPRITE_SIZE = (R*2) + SPRITE_PAD*2;
+  function buildBubbleSprite(colorIdx) {
+    const off = document.createElement('canvas');
+    off.width = SPRITE_SIZE;
+    off.height = SPRITE_SIZE;
+    const octx = off.getContext('2d');
+    const cx = SPRITE_SIZE/2, cy = SPRITE_SIZE/2;
+    const grad = octx.createRadialGradient(cx-R*0.3, cy-R*0.3, R*0.2, cx, cy, R);
     grad.addColorStop(0, '#ffffff');
     grad.addColorStop(0.25, COLORS[colorIdx]);
     grad.addColorStop(1, COLORS[colorIdx]);
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(0, 0, R*scale-1, 0, Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.restore();
+    octx.fillStyle = grad;
+    octx.beginPath();
+    octx.arc(cx, cy, R-1, 0, Math.PI*2);
+    octx.fill();
+    octx.strokeStyle = 'rgba(0,0,0,0.25)';
+    octx.lineWidth = 1.5;
+    octx.stroke();
+    return off;
+  }
+  const BUBBLE_SPRITES = COLORS.map((_, i) => buildBubbleSprite(i));
+
+  function drawBubble(x, y, colorIdx, scale) {
+    scale = scale || 1;
+    const sprite = BUBBLE_SPRITES[colorIdx];
+    const size = SPRITE_SIZE * scale;
+    ctx.drawImage(sprite, x - size/2, y - size/2, size, size);
   }
 
   function draw() {
@@ -479,7 +490,7 @@
     particles.forEach(p => {
       ctx.globalAlpha = Math.max(0, p.life/28);
       ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI*2); ctx.fill();
+      ctx.fillRect(p.x-2.5, p.y-2.5, 5, 5);
     });
     ctx.globalAlpha = 1;
 
@@ -589,12 +600,6 @@
   reset(false);
   draw();
 })();
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  });
-}
 </script>
 </body>
 </html>
